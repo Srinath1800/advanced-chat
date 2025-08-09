@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -12,83 +11,87 @@
   <script crossorigin src="https://unpkg.com/babel-standalone@6.26.0/babel.min.js"></script>
 </head>
 <body class="bg-gray-100">
-<div id="root"></div>
-<script type="text/babel">
+  <div id="root"></div>
+  <script type="text/babel">
 
-const socket = io("YOUR_BACKEND_URL"); // e.g. https://your-backend.onrender.com
+  // Use your Render backend URL here!
+  const socket = io("https://advanced-chat-xt5o.onrender.com");
 
-function ChatApp() {
-  const [messages, setMessages] = React.useState([]);
-  const [input, setInput] = React.useState("");
-  const [username, setUsername] = React.useState("");
-  const [joined, setJoined] = React.useState(false);
+  function ChatApp() {
+    const [messages, setMessages] = React.useState([]);
+    const [input, setInput] = React.useState("");
+    const [username, setUsername] = React.useState("");
+    const [joined, setJoined] = React.useState(false);
 
-  React.useEffect(() => {
-    socket.on('chatHistory', setMessages);
-    socket.on('message', msg => setMessages(prev => [...prev, msg]));
-    return () => {
-      socket.off('chatHistory');
-      socket.off('message');
-    };
-  }, []);
+    React.useEffect(() => {
+      socket.on('chatHistory', setMessages);
+      socket.on('message', msg => setMessages(prev => [...prev, msg]));
+      return () => {
+        socket.off('chatHistory');
+        socket.off('message');
+      };
+    }, []);
 
-  function sendMessage() {
-    if (!input.trim()) return;
-    socket.emit('message', { user: username, text: input });
-    setInput("");
-  }
+    function sendMessage() {
+      if (!input.trim()) return;
+      socket.emit('message', { user: username, text: input });
+      setInput("");
+    }
 
-  if (!joined) {
+    if (!joined) {
+      return (
+        <div className="flex flex-col items-center justify-center h-screen">
+          <div className="bg-white p-6 rounded shadow-md w-80">
+            <h1 className="text-xl mb-2 font-bold">Enter your name</h1>
+            <input 
+              className="border rounded px-2 py-1 w-full mb-4"
+              value={username}
+              placeholder="Your name..."
+              onChange={e => setUsername(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && username && setJoined(true)}
+            />
+            <button
+              className="w-full bg-blue-500 text-white rounded px-2 py-1"
+              disabled={!username}
+              onClick={() => setJoined(true)}
+            >Join Chat</button>
+          </div>
+        </div>
+      );
+    }
+
     return (
-      <div className="flex flex-col items-center justify-center h-screen">
-        <div className="bg-white p-6 rounded shadow-md w-80">
-          <h1 className="text-xl mb-2 font-bold">Enter your name</h1>
-          <input className="border rounded px-2 py-1 w-full mb-4"
-            value={username}
-            placeholder="Your name..."
-            onChange={e => setUsername(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && username && setJoined(true)}
-          />
-          <button className="w-full bg-blue-500 text-white rounded px-2 py-1"
-            disabled={!username}
-            onClick={() => setJoined(true)}
-          >Join Chat</button>
+      <div className="flex flex-col items-center h-screen">
+        <div className="bg-white w-full max-w-md p-5 rounded shadow flex flex-col h-[90vh] mt-6">
+          <div className="flex-1 overflow-y-auto border-b mb-3">
+            {messages.map((m, i) => (
+              <div key={i} className="mb-2">
+                <span className={`font-bold ${m.user === username ? 'text-blue-600' : 'text-gray-700'}`}>{m.user}</span>
+                <span>: </span>
+                <span>{m.text}</span>
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-2 mt-2">
+            <input
+              className="border rounded flex-1 px-2 py-1"
+              value={input}
+              autoFocus
+              placeholder="Type a message..."
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && sendMessage()}
+            />
+            <button
+              className="bg-blue-500 text-white rounded px-4"
+              onClick={sendMessage}
+            >Send</button>
+          </div>
         </div>
       </div>
     );
   }
 
-  return (
-    <div className="flex flex-col items-center h-screen">
-      <div className="bg-white w-full max-w-md p-5 rounded shadow flex flex-col h-[90vh] mt-6">
-        <div className="flex-1 overflow-y-auto border-b mb-3">
-          {messages.map((m, i) => (
-            <div key={i} className="mb-2">
-              <span className={`font-bold ${m.user === username ? 'text-blue-600' : 'text-gray-700'}`}>{m.user}</span>
-              <span>: </span>
-              <span>{m.text}</span>
-            </div>
-          ))}
-        </div>
-        <div className="flex gap-2 mt-2">
-          <input className="border rounded flex-1 px-2 py-1"
-            value={input}
-            autoFocus
-            placeholder="Type a message..."
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && sendMessage()}
-          />
-          <button className="bg-blue-500 text-white rounded px-4"
-            onClick={sendMessage}
-          >Send</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-ReactDOM.createRoot(document.getElementById("root")).render(<ChatApp />);
-
-</script>
+  ReactDOM.createRoot(document.getElementById("root")).render(<ChatApp />);
+  </script>
 </body>
 </html>
