@@ -8,7 +8,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Connect to MongoDB
+// Only declare mongoose ONCE:
 mongoose.connect(
   'mongodb+srv://srinathraikunta5:cUFqjqSlwjY247xC@cluster0.vzaw76j.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0',
   { useNewUrlParser: true, useUnifiedTopology: true }
