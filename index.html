@@ -3,251 +3,95 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Ultra Chat</title>
+  <title>Advanced Chat</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css"/>
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
   <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
   <script crossorigin src="https://unpkg.com/babel-standalone@6.26.0/babel.min.js"></script>
-  <style>
-    html, body { height: 100%; font-family: 'Inter', sans-serif; }
-    body {
-      min-height: 100vh;
-      background: linear-gradient(135deg, #8360c3 0%, #2ebf91 100%);
-      overflow: hidden;
-      position: relative;
-    }
-    .glass {
-      background: rgba(255, 255, 255, 0.1);
-      box-shadow: 0 8px 32px rgba(31,38,135,.22);
-      backdrop-filter: blur(8px);
-      border-radius: 24px;
-      border: 1px solid rgba(255,255,255,0.18);
-    }
-    .particle { position:absolute; border-radius: 50%; opacity: 0.15; z-index: 0; animation: float 12s infinite linear;}
-    .particle:nth-child(1){width:110px;height:110px;left:5vw;top:14vh;background: #fff;animation-duration:18s;}
-    .particle:nth-child(2){width:60px;height:60px;right:9vw;top:31vh;background: #2ebf91;animation-duration:15s;}
-    .particle:nth-child(3){width:95px;height:95px;right:17vw;bottom:15vh;background: #8360c3;animation-duration:13s;}
-    @keyframes float {
-      0%{transform:translateY(0)}
-      50%{transform:translateY(33px)}
-      100%{transform:translateY(0)}
-    }
-    .animate-slideInUp{animation:slideInUp 0.4s cubic-bezier(.68,-0.55,.27,1.55) both;}
-    @keyframes slideInUp {
-      from { transform: translateY(44px) scale(0.96); opacity:0.04 }
-      to { transform: translateY(0) scale(1); opacity:1; }
-    }
-  </style>
 </head>
-<body>
-  <div class="particle"></div>
-  <div class="particle"></div>
-  <div class="particle"></div>
-  <div id="root" class="relative z-10"></div>
+<body class="bg-gray-100">
+  <div id="root"></div>
   <script type="text/babel">
-// Keep your backend as it is:
-const SOCKET_URL = "https://advanced-chat-xt5o.onrender.com";
 
-// --- Utility: fancy time
-function formatTime(dateStr) {
-  const d = new Date(dateStr);
-  return d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-}
+  // Use your Render backend URL here!
+  const socket = io("https://advanced-chat-xt5o.onrender.com");
 
-// --- Main Chat App ---
-function App() {
-  const [screen, setScreen] = React.useState('login'); // login or chat
-  const [username, setUsername] = React.useState("");
-  const [input, setInput] = React.useState("");
-  const [messages, setMessages] = React.useState([]);
-  const [online, setOnline] = React.useState(1);
-  const [typing, setTyping] = React.useState(false);
-  const [someoneTyping, setSomeoneTyping] = React.useState(false);
-  const myRef = React.useRef(null);
-  const socketRef = React.useRef(null);
+  function ChatApp() {
+    const [messages, setMessages] = React.useState([]);
+    const [input, setInput] = React.useState("");
+    const [username, setUsername] = React.useState("");
+    const [joined, setJoined] = React.useState(false);
 
-  const isAdmin = username.trim().toLowerCase() === 'admin';
+    React.useEffect(() => {
+      socket.on('chatHistory', setMessages);
+      socket.on('message', msg => setMessages(prev => [...prev, msg]));
+      return () => {
+        socket.off('chatHistory');
+        socket.off('message');
+      };
+    }, []);
 
-  // --- Connect on Chat Screen Enter ---
-  React.useEffect(()=>{
-    if(screen !== "chat") return;
-    const socket = io(SOCKET_URL);
-    socketRef.current = socket;
-    socket.on('chatHistory', setMessages);
-    socket.on('message', msg => setMessages(prev => [...prev, msg]));
-    socket.on('usersOnline', setOnline);
-    socket.on('typing', user => { if (user !== username) setSomeoneTyping(true); });
-    socket.on('stopTyping', user => { if (user !== username) setSomeoneTyping(false); });
-
-    // Track online (user joins/leaves)
-    socket.emit('usersOnline');
-    return ()=>{socket.disconnect();}
-  }, [screen, username]);
-
-  // --- Scroll to latest
-  React.useEffect(()=>{
-    if(screen === "chat") myRef.current?.scrollIntoView({behavior:"smooth"});
-  }, [messages, someoneTyping, screen]);
-
-  // --- Typing event
-  React.useEffect(()=>{
-    if(!socketRef.current || screen!=="chat") return;
-    if(typing) {
-      socketRef.current.emit("typing", username);
-      const t = setTimeout(() => {socketRef.current.emit("stopTyping", username)}, 1000);
-      return ()=>clearTimeout(t);
+    function sendMessage() {
+      if (!input.trim()) return;
+      socket.emit('message', { user: username, text: input });
+      setInput("");
     }
-  }, [typing, screen]);
 
-  // --- Join Logic ---
-  if(screen==="login") {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen relative z-10">
-        <div className="glass p-8 shadow-2xl max-w-[340px] w-full">
-          <div className="flex justify-center mb-2">
-            <span className="fa-solid fa-comments fa-3x text-indigo-400 drop-shadow" />
+    if (!joined) {
+      return (
+        <div className="flex flex-col items-center justify-center h-screen">
+          <div className="bg-white p-6 rounded shadow-md w-80">
+            <h1 className="text-xl mb-2 font-bold">Enter your name</h1>
+            <input 
+              className="border rounded px-2 py-1 w-full mb-4"
+              value={username}
+              placeholder="Your name..."
+              onChange={e => setUsername(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && username && setJoined(true)}
+            />
+            <button
+              className="w-full bg-blue-500 text-white rounded px-2 py-1"
+              disabled={!username}
+              onClick={() => setJoined(true)}
+            >Join Chat</button>
           </div>
-          <h1 className="text-2xl font-bold text-center mb-3 text-gray-900 tracking-tight">Welcome to Ultra Chat</h1>
-          <p className="text-center text-gray-600 mb-6">Choose a username to enter chat.<br/>
-            <b>Only users with exact name can join as that user.</b><br/>
-            <span className="text-xs text-gray-400">Tip: Try <b>admin</b> for admin mode</span>
-          </p>
-          <input 
-            className="border border-gray-300 rounded-full px-4 py-2 w-full mb-4 focus:ring-2 focus:ring-indigo-300 focus:outline-none text-lg bg-white bg-opacity-85"
-            value={username}
-            maxLength={18}
-            placeholder="Username (letters/numbers)"
-            pattern="[a-zA-Z0-9_]+"
-            autoFocus
-            onChange={e => setUsername(e.target.value.replace(/[^\w]/g,""))}
-            onKeyDown={e => e.key === "Enter" && username.length > 0 && setScreen("chat")}
-          />
-          <button
-            className="w-full bg-gradient-to-r from-indigo-400 to-green-400 hover:from-green-400 hover:to-indigo-400 text-white rounded-full font-bold py-2 shadow-lg mb-0"
-            disabled={!username}
-            onClick={()=> setScreen("chat")}
-          >
-            <span className="fa-solid fa-right-to-bracket mr-2"></span>Enter Chat
-          </button>
         </div>
-        <div className="absolute bottom-8 text-gray-100 w-full z-0 text-center pointer-events-none select-none text-lg font-semibold opacity-55">
-          Ultra Visual Chat – Built for You!
+      );
+    }
+
+    return (
+      <div className="flex flex-col items-center h-screen">
+        <div className="bg-white w-full max-w-md p-5 rounded shadow flex flex-col h-[90vh] mt-6">
+          <div className="flex-1 overflow-y-auto border-b mb-3">
+            {messages.map((m, i) => (
+              <div key={i} className="mb-2">
+                <span className={`font-bold ${m.user === username ? 'text-blue-600' : 'text-gray-700'}`}>{m.user}</span>
+                <span>: </span>
+                <span>{m.text}</span>
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-2 mt-2">
+            <input
+              className="border rounded flex-1 px-2 py-1"
+              value={input}
+              autoFocus
+              placeholder="Type a message..."
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && sendMessage()}
+            />
+            <button
+              className="bg-blue-500 text-white rounded px-4"
+              onClick={sendMessage}
+            >Send</button>
+          </div>
         </div>
       </div>
     );
   }
 
-  // --- Clear all messages (admin only)
-  async function clearMessages() {
-    if(!window.confirm("Clear ALL messages?")) return;
-    // Safe even without endpoint: clear only UI for demo privacy (or call a backend DELETE route if you wish)
-    setMessages([]);
-  }
-
-  // --- Chat UI ---
-  return (
-    <div className="flex flex-col items-center min-h-screen py-8 relative z-10">
-      <div className="glass w-full max-w-md p-4 mb-4 shadow-xl flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <span className="fa-solid fa-comments fa-lg text-indigo-400" />
-          <span className="font-bold text-lg text-gray-900">Ultra Chat</span>
-            <span className="fa-solid fa-circle text-green-400 animate-pulse ml-1"/><span className="text-xs font-medium text-gray-500 ml-1">• {online}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-gray-700 text-sm flex items-center">
-            <span className="w-2 h-2 bg-green-400 rounded-full mr-1 animate-pulse" />{username}
-          </span>
-          {isAdmin && (
-            <button
-              onClick={clearMessages}
-              className="ml-3 px-3 py-1 rounded-full bg-gradient-to-r from-red-400 to-pink-400 text-white font-bold text-xs shadow-md hover:scale-105 transition"
-              title="Admin: clear all"
-            >Clear All</button>
-          )}
-          <button title="Logout"
-            className="ml-3 px-2 py-1 text-indigo-400 hover:text-pink-400 font-bold"
-            onClick={()=>{setScreen("login");setUsername("");}}
-          ><span className="fa fa-sign-out-alt"></span></button>
-        </div>
-      </div>
-      {/* Messages */}
-      <div className="glass flex-1 w-full max-w-md flex flex-col rounded-lg shadow-2xl p-0 relative overflow-hidden"
-           style={{minHeight: 430, maxHeight: 510}}>
-        <div className="flex-1 overflow-y-auto p-4"
-             style={{scrollBehavior:"smooth"}}>
-          {messages.map((m, i) => (
-            <div key={i} className={`flex items-end mb-2 ${m.user === username ? "justify-end" : "justify-start"}`}>
-              {m.user !== username && (
-                <span className="mr-2 mb-6 flex flex-col items-start">
-                  <span className="text-xs font-semibold text-indigo-600">{m.user}</span>
-                </span>
-              )}
-              <div className={`
-                px-4 py-2 rounded-2xl glass shadow-md font-medium max-w-[70%] break-words
-                ${m.user === username ?
-                  "bg-gradient-to-tr from-green-200 via-teal-100 to-white text-gray-900 rounded-br-3xl rounded-tr-none" :
-                  "bg-gradient-to-tr from-indigo-200 via-purple-100 to-white text-gray-800 rounded-bl-3xl rounded-tl-none"}
-                animate-slideInUp
-              `}
-                style={{backdropFilter:'blur(5px)'}}>
-                <span>{m.text}</span>
-                <span className="block text-[10px] text-right text-gray-500 font-mono tracking-tighter mt-1 opacity-80">{formatTime(m.time || Date.now())}</span>
-              </div>
-            </div>
-          ))}
-          {someoneTyping &&
-            <div className="flex items-center my-3">
-              <span className="bg-gray-300 rounded-2xl px-3 py-1 flex items-center glass">
-                <span className="mr-2">Someone is typing</span>
-                <span className="flex space-x-1">
-                  {[0,1,2].map(i => (
-                    <span key={i} className="h-2 w-2 bg-gray-500 rounded-full animate-bounce"
-                      style={{animationDelay: `${i*0.2}s`}}></span>
-                  ))}
-                </span>
-              </span>
-            </div>
-          }
-          <div ref={myRef} />
-        </div>
-        {/* Input Area */}
-        <div className="border-t px-3 py-2 bg-white bg-opacity-45 flex items-center gap-2"
-             style={{backdropFilter:"blur(8px)"}}>
-          <input
-            className="flex-1 border-none outline-none bg-transparent px-2 py-2 text-base rounded-full placeholder:text-gray-400 font-medium focus:ring-2 focus:ring-indigo-300"
-            value={input}
-            placeholder="Type a message..."
-            maxLength={200}
-            autoFocus
-            onChange={e => { setInput(e.target.value); setTyping(true); setTimeout(() => setTyping(false), 600);} }
-            onKeyDown={e=>e.key==="Enter"&&input&&socketRef.current.emit("message", { user: username, text: input })}
-          />
-          <button
-            className="bg-gradient-to-br from-indigo-400 to-green-400 hover:from-green-400 hover:to-indigo-400 rounded-full px-4 py-2 text-white shadow-xl text-lg font-bold transition hover:scale-110 focus:ring-2 focus:ring-indigo-400"
-            style={{minWidth:50}}
-            onClick={()=>{
-              if(input.trim()){
-                socketRef.current.emit('message', { user: username, text: input });
-                setInput('');
-                setTyping(false);
-                socketRef.current.emit('stopTyping', username);
-              }
-            }}
-            title="Send"
-          ><span className="fa-solid fa-paper-plane"/></button>
-        </div>
-      </div>
-      <div className="text-xs text-white mt-4 opacity-70 select-none pointer-events-none">
-        <span className="fa fa-bolt text-yellow-300 mr-1" /> Ultra Visual Chat UI
-      </div>
-    </div>
-  );
-}
-
-ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  ReactDOM.createRoot(document.getElementById("root")).render(<ChatApp />);
   </script>
 </body>
 </html>
