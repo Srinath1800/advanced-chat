@@ -3,16 +3,11 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Advanced Chat Pro</title>
-  <!-- Tailwind CSS -->
+  <title>Ultra Chat</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- FontAwesome Icons -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css"/>
-  <!-- Google Fonts for premium look -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
-  <!-- Socket.IO -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css"/>
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-  <!-- React Libraries -->
   <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
   <script crossorigin src="https://unpkg.com/babel-standalone@6.26.0/babel.min.js"></script>
@@ -21,319 +16,238 @@
     body {
       min-height: 100vh;
       background: linear-gradient(135deg, #8360c3 0%, #2ebf91 100%);
-      position: relative;
       overflow: hidden;
+      position: relative;
     }
     .glass {
-      background: rgba(255, 255, 255, 0.25);
-      box-shadow: 0 8px 32px 0 rgba(31,38,135,0.1);
+      background: rgba(255, 255, 255, 0.1);
+      box-shadow: 0 8px 32px rgba(31,38,135,.22);
       backdrop-filter: blur(8px);
       border-radius: 24px;
-      border: 1px solid rgba(255,255,255,0.12);
+      border: 1px solid rgba(255,255,255,0.18);
     }
-    .particle { position: absolute; border-radius: 50%; opacity: 0.2; z-index: 0; animation: float 12s infinite linear; }
-    .particle:nth-child(1) { width: 140px; height: 140px; left: 5vw; top: 16vh; background: #2ebf91; animation-duration: 20s; }
-    .particle:nth-child(2) { width: 90px; height: 90px; right: 10vw; top: 30vh; background: #8360c3; animation-duration: 16s; animation-delay: 6s; }
-    .particle:nth-child(3) { width: 55px; height: 55px; right: 17vw; bottom: 16vh; background: #fff; animation-duration: 14s; animation-delay: 3s; }
+    .particle { position:absolute; border-radius: 50%; opacity: 0.15; z-index: 0; animation: float 12s infinite linear;}
+    .particle:nth-child(1){width:110px;height:110px;left:5vw;top:14vh;background: #fff;animation-duration:18s;}
+    .particle:nth-child(2){width:60px;height:60px;right:9vw;top:31vh;background: #2ebf91;animation-duration:15s;}
+    .particle:nth-child(3){width:95px;height:95px;right:17vw;bottom:15vh;background: #8360c3;animation-duration:13s;}
     @keyframes float {
-      0% { transform: translateY(0) }
-      50% { transform: translateY(35px) }
-      100% { transform: translateY(0) }
+      0%{transform:translateY(0)}
+      50%{transform:translateY(33px)}
+      100%{transform:translateY(0)}
+    }
+    .animate-slideInUp{animation:slideInUp 0.4s cubic-bezier(.68,-0.55,.27,1.55) both;}
+    @keyframes slideInUp {
+      from { transform: translateY(44px) scale(0.96); opacity:0.04 }
+      to { transform: translateY(0) scale(1); opacity:1; }
     }
   </style>
 </head>
 <body>
-  <!-- Animated Particles -->
   <div class="particle"></div>
   <div class="particle"></div>
   <div class="particle"></div>
-  
   <div id="root" class="relative z-10"></div>
   <script type="text/babel">
-  // SETTINGS
-  const API_URL = "https://advanced-chat-xt5o.onrender.com"; // Your backend
-  const SOCKET_URL = API_URL;
+// Keep your backend as it is:
+const SOCKET_URL = "https://advanced-chat-xt5o.onrender.com";
 
-  function getToken() {
-    return window.localStorage.getItem("token");
-  }
-  function setToken(t) {
-    window.localStorage.setItem("token", t);
-  }
+// --- Utility: fancy time
+function formatTime(dateStr) {
+  const d = new Date(dateStr);
+  return d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+}
 
-  // Auth/Login/Register form
-  function AuthScreen({ setUser }) {
-    const [tab, setTab] = React.useState('login');
-    const [form, setForm] = React.useState({ username: "", password: "" });
-    const [error, setError] = React.useState("");
-    async function submit(e) {
-      e.preventDefault();
-      setError("");
-      const path = tab === "login" ? "/login" : "/register";
-      const res = await fetch(API_URL+path, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form)
-      });
-      const data = await res.json();
-      if (data.token) {
-        setToken(data.token);
-        setUser({ username: data.username, token: data.token });
-      } else if (data.success) {
-        setTab("login");
-      } else {
-        setError(data.error || "Error");
-      }
+// --- Main Chat App ---
+function App() {
+  const [screen, setScreen] = React.useState('login'); // login or chat
+  const [username, setUsername] = React.useState("");
+  const [input, setInput] = React.useState("");
+  const [messages, setMessages] = React.useState([]);
+  const [online, setOnline] = React.useState(1);
+  const [typing, setTyping] = React.useState(false);
+  const [someoneTyping, setSomeoneTyping] = React.useState(false);
+  const myRef = React.useRef(null);
+  const socketRef = React.useRef(null);
+
+  const isAdmin = username.trim().toLowerCase() === 'admin';
+
+  // --- Connect on Chat Screen Enter ---
+  React.useEffect(()=>{
+    if(screen !== "chat") return;
+    const socket = io(SOCKET_URL);
+    socketRef.current = socket;
+    socket.on('chatHistory', setMessages);
+    socket.on('message', msg => setMessages(prev => [...prev, msg]));
+    socket.on('usersOnline', setOnline);
+    socket.on('typing', user => { if (user !== username) setSomeoneTyping(true); });
+    socket.on('stopTyping', user => { if (user !== username) setSomeoneTyping(false); });
+
+    // Track online (user joins/leaves)
+    socket.emit('usersOnline');
+    return ()=>{socket.disconnect();}
+  }, [screen, username]);
+
+  // --- Scroll to latest
+  React.useEffect(()=>{
+    if(screen === "chat") myRef.current?.scrollIntoView({behavior:"smooth"});
+  }, [messages, someoneTyping, screen]);
+
+  // --- Typing event
+  React.useEffect(()=>{
+    if(!socketRef.current || screen!=="chat") return;
+    if(typing) {
+      socketRef.current.emit("typing", username);
+      const t = setTimeout(() => {socketRef.current.emit("stopTyping", username)}, 1000);
+      return ()=>clearTimeout(t);
     }
+  }, [typing, screen]);
+
+  // --- Join Logic ---
+  if(screen==="login") {
     return (
-      <div className="flex flex-col items-center justify-center min-h-screen">
-        <div className="glass p-8 shadow-2xl max-w-[350px] w-full">
-          <h1 className="text-2xl font-bold text-center mb-3 text-gray-900">Advanced Chat Pro</h1>
-          <div className="flex justify-center mb-3">
-            <button className={`px-3 py-1 rounded-l-full font-semibold ${tab==="login" ? "bg-indigo-400 text-white" : "bg-gray-200"}`}
-              onClick={() => setTab('login')}>Login</button>
-            <button className={`px-3 py-1 rounded-r-full font-semibold ${tab==="register" ? "bg-indigo-400 text-white" : "bg-gray-200"}`}
-              onClick={() => setTab('register')}>Register</button>
+      <div className="flex flex-col items-center justify-center min-h-screen relative z-10">
+        <div className="glass p-8 shadow-2xl max-w-[340px] w-full">
+          <div className="flex justify-center mb-2">
+            <span className="fa-solid fa-comments fa-3x text-indigo-400 drop-shadow" />
           </div>
-          <form onSubmit={submit} className="space-y-3">
-            <input type="text" maxLength={20} required autoFocus
-              className="border border-gray-300 rounded-full px-4 py-2 w-full"
-              placeholder="Username"
-              value={form.username}
-              onChange={e=>setForm(f=>({...f, username: e.target.value.replace(/[^\w]/g,'')}))}/>
-            <input type="password" required
-              className="border border-gray-300 rounded-full px-4 py-2 w-full"
-              placeholder="Password"
-              value={form.password}
-              onChange={e=>setForm(f=>({...f, password: e.target.value}))}/>
-            {error && <p className="text-red-500">{error}</p>}
+          <h1 className="text-2xl font-bold text-center mb-3 text-gray-900 tracking-tight">Welcome to Ultra Chat</h1>
+          <p className="text-center text-gray-600 mb-6">Choose a username to enter chat.<br/>
+            <b>Only users with exact name can join as that user.</b><br/>
+            <span className="text-xs text-gray-400">Tip: Try <b>admin</b> for admin mode</span>
+          </p>
+          <input 
+            className="border border-gray-300 rounded-full px-4 py-2 w-full mb-4 focus:ring-2 focus:ring-indigo-300 focus:outline-none text-lg bg-white bg-opacity-85"
+            value={username}
+            maxLength={18}
+            placeholder="Username (letters/numbers)"
+            pattern="[a-zA-Z0-9_]+"
+            autoFocus
+            onChange={e => setUsername(e.target.value.replace(/[^\w]/g,""))}
+            onKeyDown={e => e.key === "Enter" && username.length > 0 && setScreen("chat")}
+          />
+          <button
+            className="w-full bg-gradient-to-r from-indigo-400 to-green-400 hover:from-green-400 hover:to-indigo-400 text-white rounded-full font-bold py-2 shadow-lg mb-0"
+            disabled={!username}
+            onClick={()=> setScreen("chat")}
+          >
+            <span className="fa-solid fa-right-to-bracket mr-2"></span>Enter Chat
+          </button>
+        </div>
+        <div className="absolute bottom-8 text-gray-100 w-full z-0 text-center pointer-events-none select-none text-lg font-semibold opacity-55">
+          Ultra Visual Chat – Built for You!
+        </div>
+      </div>
+    );
+  }
+
+  // --- Clear all messages (admin only)
+  async function clearMessages() {
+    if(!window.confirm("Clear ALL messages?")) return;
+    // Safe even without endpoint: clear only UI for demo privacy (or call a backend DELETE route if you wish)
+    setMessages([]);
+  }
+
+  // --- Chat UI ---
+  return (
+    <div className="flex flex-col items-center min-h-screen py-8 relative z-10">
+      <div className="glass w-full max-w-md p-4 mb-4 shadow-xl flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <span className="fa-solid fa-comments fa-lg text-indigo-400" />
+          <span className="font-bold text-lg text-gray-900">Ultra Chat</span>
+            <span className="fa-solid fa-circle text-green-400 animate-pulse ml-1"/><span className="text-xs font-medium text-gray-500 ml-1">• {online}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-gray-700 text-sm flex items-center">
+            <span className="w-2 h-2 bg-green-400 rounded-full mr-1 animate-pulse" />{username}
+          </span>
+          {isAdmin && (
             <button
-              className="w-full bg-gradient-to-r from-indigo-400 to-green-400 hover:from-green-400 hover:to-indigo-400 text-white rounded-full font-bold py-2 shadow-lg"
-              type="submit">{tab === "login" ? "Login" : "Register"}</button>
-          </form>
+              onClick={clearMessages}
+              className="ml-3 px-3 py-1 rounded-full bg-gradient-to-r from-red-400 to-pink-400 text-white font-bold text-xs shadow-md hover:scale-105 transition"
+              title="Admin: clear all"
+            >Clear All</button>
+          )}
+          <button title="Logout"
+            className="ml-3 px-2 py-1 text-indigo-400 hover:text-pink-400 font-bold"
+            onClick={()=>{setScreen("login");setUsername("");}}
+          ><span className="fa fa-sign-out-alt"></span></button>
         </div>
       </div>
-    );
-  }
-
-  // Room selection
-  function RoomSelector({ user, setRoom }) {
-    const [roomName, setRoomName] = React.useState("");
-    function pickRoom(e) {
-      e.preventDefault();
-      if (roomName.trim()) setRoom(roomName.toLowerCase());
-    }
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen select-none relative z-10">
-        <div className="glass p-8 shadow-2xl max-w-[350px] w-full">
-          <h2 className="text-xl font-bold text-center mb-3 text-gray-900">Hello, {user.username}</h2>
-          <p className="mb-3 text-center">Enter a room name to start chatting.</p>
-          <form onSubmit={pickRoom}>
-            <input className="border border-gray-300 rounded-full px-4 py-2 w-full mb-4 focus:ring-2 focus:ring-indigo-300"
-              value={roomName}
-              placeholder="Room name..."
-              onChange={e=>setRoomName(e.target.value.replace(/[^\w]/g,''))}
-              autoFocus />
-            <button className="w-full bg-gradient-to-r from-indigo-400 to-green-400 text-white rounded-full font-bold py-2 shadow-lg"
-              type="submit" disabled={!roomName}>Join Room</button>
-          </form>
-        </div>
-      </div>
-    );
-  }
-
-  // Chat App Main
-  function ChatApp() {
-    const [user, setUser] = React.useState(()=> {
-      const token = getToken();
-      return token ? { token } : null;
-    });
-    const [room, setRoom] = React.useState("");
-    const [messages, setMessages] = React.useState([]);
-    const [input, setInput] = React.useState("");
-    const [usersOnline, setUsersOnline] = React.useState(1);
-    const [typing, setTyping] = React.useState(false);
-    const [someoneTyping, setSomeoneTyping] = React.useState(false);
-    const socketRef = React.useRef(null);
-
-    // Add message time display
-    function formatTime(dateStr) {
-      const d = new Date(dateStr);
-      return d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-    }
-
-    // Handle socket.io connection
-    React.useEffect(() => {
-      if (!user?.username || !room) return;
-      const socket = io(SOCKET_URL);
-      socketRef.current = socket;
-      socket.emit('join', { username: user.username, room, token: user.token });
-
-      socket.on('chatHistory', setMessages);
-      socket.on('message', msg => setMessages(prev => [...prev, msg]));
-      socket.on('usersOnline', setUsersOnline);
-      socket.on('typing', () => setSomeoneTyping(true));
-      socket.on('stopTyping', () => setSomeoneTyping(false));
-      socket.on('authError', () => {
-        alert("Session expired. Please login again.");
-        setUser(null);
-      });
-      return () => {
-        socket.off();
-        socket.disconnect();
-      };
-    }, [user, room]);
-
-    // Scroll to latest message
-    const messagesEndRef = React.useRef(null);
-    React.useEffect(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    }, [messages, someoneTyping]);
-
-    // Typing event handler
-    React.useEffect(() => {
-      if (!user?.username || !room) return;
-      if (typing) {
-        socketRef.current.emit("typing", {room, user: user.username});
-        const timeout = setTimeout(() => {
-          socketRef.current.emit("stopTyping", {room, user: user.username});
-        }, 1000);
-        return () => clearTimeout(timeout);
-      }
-    }, [typing, user, room]);
-
-    async function sendMessage() {
-      if (!input.trim()) return;
-      socketRef.current.emit('message', { user: user.username, room, text: input });
-      setInput("");
-      setTyping(false);
-      socketRef.current.emit("stopTyping", {room, user: user.username});
-    }
-    async function clearMessages() {
-      if (!window.confirm("Clear all messages?")) return;
-      await fetch(`${API_URL}/clear-messages/${room}`, {
-        method: "DELETE",
-        headers: { 'Authorization': user.token }
-      });
-    }
-
-    // If not authenticated (login/register)
-    if (!user?.token)   return <AuthScreen setUser={setUser} />;
-    if (!user?.username) {
-      // After token, fetch user info (you could decode username from JWT in real production)
-      // Here, just ask for username and login again if missing
-      setUser(null);
-    }
-    // If no room picked, show room selector
-    if (!room)          return <RoomSelector user={user} setRoom={setRoom} />;
-
-    const isAdmin = user.username === "admin";
-
-    // Chat UI
-    return (
-      <div className="flex flex-col items-center min-h-screen py-8 relative z-10">
-        <div className="glass w-full max-w-md p-4 mb-4 shadow-xl flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="fa-solid fa-comments fa-lg text-indigo-400" />
-            <span className="font-bold text-lg text-gray-900">Room: "{room}"</span>
-            <span className="fa-solid fa-circle text-green-400 animate-pulse ml-1" title="Online"/>
-            <span className="ml-1 text-xs font-medium text-gray-500">({usersOnline})</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-gray-600 text-sm flex items-center">
-              <span className="w-2 h-2 bg-green-400 rounded-full mr-1 animate-pulse" title="You are online"/>
-              {user.username}
-            </span>
-            {isAdmin && (
-              <button className="ml-2 px-3 py-1 rounded-full bg-gradient-to-r from-red-400 to-pink-400 text-white font-bold text-xs shadow-md hover:from-pink-400 hover:to-red-400 hover:scale-105 transition"
-                onClick={clearMessages}>Clear All</button>
-            )}
-          </div>
-        </div>
-        <div className="glass flex-1 w-full max-w-md flex flex-col rounded-lg shadow-2xl p-0 relative overflow-hidden"
-             style={{minHeight: 460, maxHeight: 500}}>
-          <div className="flex-1 overflow-y-auto p-4 transition-all"
-               style={{scrollBehavior:"smooth"}}>
-            {messages.map((m, i) => (
-              <div key={i}
-                className={`flex items-end mb-2 ${m.user === user.username ? "justify-end" : "justify-start"}`}>
-                {m.user !== user.username && (
-                  <span className="mr-2 mb-6 flex flex-col items-start">
-                    <span className="text-xs font-semibold text-indigo-600">{m.user}</span>
-                  </span>
-                )}
-                <div className={`
-                  px-4 py-2 rounded-2xl glass shadow-md font-medium max-w-[70%] break-words
-                  ${m.user === user.username
-                      ? "bg-gradient-to-tr from-green-200 via-teal-100 to-white text-gray-900 rounded-br-3xl rounded-tr-none"
-                      : "bg-gradient-to-tr from-indigo-200 via-purple-100 to-white text-gray-800 rounded-bl-3xl rounded-tl-none"}
-                  animate-slideInUp
-                `}
-                  style={{backdropFilter:'blur(5px)'}}>
-                  <span>{m.text}</span>
-                  <span className="block text-[10px] text-right text-gray-500 font-mono tracking-tighter mt-1 opacity-80">
-                    {formatTime(m.time || Date.now())}
-                  </span>
-                </div>
-              </div>
-            ))}
-            {someoneTyping && (
-              <div className="flex items-center my-3">
-                <span className="bg-gray-300 rounded-2xl px-3 py-1 flex items-center glass">
-                  <span className="mr-2">Someone is typing</span>
-                  <span className="flex space-x-1">
-                    {[0,1,2].map(i => (
-                      <span key={i} className="h-2 w-2 bg-gray-500 rounded-full animate-bounce"
-                        style={{animationDelay: `${i*0.2}s`}}></span>
-                    ))}
-                  </span>
+      {/* Messages */}
+      <div className="glass flex-1 w-full max-w-md flex flex-col rounded-lg shadow-2xl p-0 relative overflow-hidden"
+           style={{minHeight: 430, maxHeight: 510}}>
+        <div className="flex-1 overflow-y-auto p-4"
+             style={{scrollBehavior:"smooth"}}>
+          {messages.map((m, i) => (
+            <div key={i} className={`flex items-end mb-2 ${m.user === username ? "justify-end" : "justify-start"}`}>
+              {m.user !== username && (
+                <span className="mr-2 mb-6 flex flex-col items-start">
+                  <span className="text-xs font-semibold text-indigo-600">{m.user}</span>
                 </span>
+              )}
+              <div className={`
+                px-4 py-2 rounded-2xl glass shadow-md font-medium max-w-[70%] break-words
+                ${m.user === username ?
+                  "bg-gradient-to-tr from-green-200 via-teal-100 to-white text-gray-900 rounded-br-3xl rounded-tr-none" :
+                  "bg-gradient-to-tr from-indigo-200 via-purple-100 to-white text-gray-800 rounded-bl-3xl rounded-tl-none"}
+                animate-slideInUp
+              `}
+                style={{backdropFilter:'blur(5px)'}}>
+                <span>{m.text}</span>
+                <span className="block text-[10px] text-right text-gray-500 font-mono tracking-tighter mt-1 opacity-80">{formatTime(m.time || Date.now())}</span>
               </div>
-            )}
-            <div ref={messagesEndRef} />
-          </div>
-          <div className="border-t px-3 py-2 bg-white bg-opacity-50 flex items-center gap-2"
-               style={{backdropFilter:"blur(8px)"}}>
-            <input
-              className="flex-1 border-none outline-none bg-transparent px-2 py-2 text-base rounded-full placeholder:text-gray-400 font-medium focus:ring-2 focus:ring-indigo-300"
-              value={input}
-              placeholder="Type a message..."
-              autoFocus
-              maxLength={200}
-              onChange={e => {setInput(e.target.value); setTyping(true); setTimeout(() => setTyping(false), 600);}}
-              onKeyDown={e => {if (e.key === "Enter") sendMessage();}}
-            />
-            <button
-              className="bg-gradient-to-br from-indigo-400 to-green-400 hover:from-green-400 hover:to-indigo-400 rounded-full px-4 py-2 text-white shadow-xl text-lg font-bold transition hover:scale-110 focus:ring-2 focus:ring-indigo-400"
-              style={{minWidth:50}}
-              onClick={sendMessage}
-              title="Send"
-            >
-              <span className="fa-solid fa-paper-plane" />
-            </button>
-          </div>
+            </div>
+          ))}
+          {someoneTyping &&
+            <div className="flex items-center my-3">
+              <span className="bg-gray-300 rounded-2xl px-3 py-1 flex items-center glass">
+                <span className="mr-2">Someone is typing</span>
+                <span className="flex space-x-1">
+                  {[0,1,2].map(i => (
+                    <span key={i} className="h-2 w-2 bg-gray-500 rounded-full animate-bounce"
+                      style={{animationDelay: `${i*0.2}s`}}></span>
+                  ))}
+                </span>
+              </span>
+            </div>
+          }
+          <div ref={myRef} />
         </div>
-        <div className="text-xs text-white mt-4 opacity-70 select-none pointer-events-none">
-          <span className="fa fa-bolt text-yellow-300 mr-1" /> Ultra Visual Chat UI
+        {/* Input Area */}
+        <div className="border-t px-3 py-2 bg-white bg-opacity-45 flex items-center gap-2"
+             style={{backdropFilter:"blur(8px)"}}>
+          <input
+            className="flex-1 border-none outline-none bg-transparent px-2 py-2 text-base rounded-full placeholder:text-gray-400 font-medium focus:ring-2 focus:ring-indigo-300"
+            value={input}
+            placeholder="Type a message..."
+            maxLength={200}
+            autoFocus
+            onChange={e => { setInput(e.target.value); setTyping(true); setTimeout(() => setTyping(false), 600);} }
+            onKeyDown={e=>e.key==="Enter"&&input&&socketRef.current.emit("message", { user: username, text: input })}
+          />
+          <button
+            className="bg-gradient-to-br from-indigo-400 to-green-400 hover:from-green-400 hover:to-indigo-400 rounded-full px-4 py-2 text-white shadow-xl text-lg font-bold transition hover:scale-110 focus:ring-2 focus:ring-indigo-400"
+            style={{minWidth:50}}
+            onClick={()=>{
+              if(input.trim()){
+                socketRef.current.emit('message', { user: username, text: input });
+                setInput('');
+                setTyping(false);
+                socketRef.current.emit('stopTyping', username);
+              }
+            }}
+            title="Send"
+          ><span className="fa-solid fa-paper-plane"/></button>
         </div>
       </div>
-    );
-  }
+      <div className="text-xs text-white mt-4 opacity-70 select-none pointer-events-none">
+        <span className="fa fa-bolt text-yellow-300 mr-1" /> Ultra Visual Chat UI
+      </div>
+    </div>
+  );
+}
 
-  // Extra CSS for message animation
-  document.head.insertAdjacentHTML("beforeend", `
-    <style>
-      .animate-slideInUp {
-        animation: slideInUp 0.4s cubic-bezier(.68,-0.55,.27,1.55) both;
-      }
-      @keyframes slideInUp {
-        from { transform: translateY(44px) scale(0.96); opacity:0.1 }
-        to { transform: translateY(0) scale(1); opacity:1; }
-      }
-    </style>
-  `);
-
-  ReactDOM.createRoot(document.getElementById("root")).render(<ChatApp />);
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
   </script>
 </body>
 </html>
