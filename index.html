@@ -1,96 +1,320 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Advanced Chat</title>
+  <title>Advanced Chat Pro</title>
+  <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css"/>
+  <!-- Google Fonts for premium look -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+  <!-- Socket.IO -->
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <!-- React Libraries -->
   <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
   <script crossorigin src="https://unpkg.com/babel-standalone@6.26.0/babel.min.js"></script>
+  <style>
+    html, body {
+      height: 100%;
+      font-family: 'Inter', sans-serif;
+    }
+    body {
+      min-height: 100vh;
+      /* Gradient background */
+      background: linear-gradient(135deg, #8360c3 0%, #2ebf91 100%);
+      position: relative;
+      overflow: hidden;
+    }
+    .glass {
+      background: rgba(255, 255, 255, 0.25);
+      box-shadow: 0 8px 32px 0 rgba(31,38,135,0.1);
+      backdrop-filter: blur(8px);
+      border-radius: 24px;
+      border: 1px solid rgba(255,255,255,0.12);
+    }
+    /* Floating particles for background */
+    .particle {
+      position: absolute;
+      border-radius: 50%;
+      opacity: 0.2;
+      z-index: 0;
+      animation: float 12s infinite linear;
+    }
+    .particle:nth-child(1) {
+      width: 140px; height: 140px; left: 5vw; top: 16vh; background: #2ebf91;
+      animation-duration: 20s;
+    }
+    .particle:nth-child(2) {
+      width: 90px; height: 90px; right: 10vw; top: 30vh; background: #8360c3;
+      animation-duration: 16s; animation-delay: 6s;
+    }
+    .particle:nth-child(3) {
+      width: 55px; height: 55px; right: 17vw; bottom: 16vh; background: #fff;
+      animation-duration: 14s; animation-delay: 3s;
+    }
+    @keyframes float {
+      0% { transform: translateY(0) }
+      50% { transform: translateY(35px) }
+      100% { transform: translateY(0) }
+    }
+  </style>
 </head>
-<body class="bg-gray-100">
-  <div id="root"></div>
+<body>
+  <!-- Animated Particles -->
+  <div class="particle"></div>
+  <div class="particle"></div>
+  <div class="particle"></div>
+  
+  <div id="root" class="relative z-10"></div>
   <script type="text/babel">
 
-  // Use your Render backend URL here!
-  const socket = io("https://advanced-chat-xt5o.onrender.com");
+  // --- SETTINGS ---
+  const SOCKET_URL = "https://advanced-chat-xt5o.onrender.com"; // Your backend
 
+  // Utility: get readable time
+  function formatTime(dateStr) {
+    const d = new Date(dateStr);
+    return d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+  }
+
+  function TypingIndicator({show}) {
+    if (!show) return null;
+    return (
+      <div className="flex items-center my-3">
+        <span className="bg-gray-300 rounded-2xl px-3 py-1 flex items-center glass">
+          <span className="mr-2">Someone is typing</span>
+          <span className="flex space-x-1">
+            {[0,1,2].map(i => (
+              <span key={i} className={`h-2 w-2 bg-gray-500 rounded-full animate-bounce`}
+                style={{animationDelay: `${i*0.2}s`}}></span>
+            ))}
+          </span>
+        </span>
+      </div>
+    );
+  }
+
+  // Main App
   function ChatApp() {
     const [messages, setMessages] = React.useState([]);
     const [input, setInput] = React.useState("");
     const [username, setUsername] = React.useState("");
     const [joined, setJoined] = React.useState(false);
+    const [usersOnline, setUsersOnline] = React.useState(1);
+    const [typing, setTyping] = React.useState(false);
+    const [someoneTyping, setSomeoneTyping] = React.useState(false);
+
+    const isAdmin = username.trim().toLowerCase() === "admin";
+
+    // Setup socket
+    const socketRef = React.useRef(null);
 
     React.useEffect(() => {
+      const socket = io(SOCKET_URL);
+      socketRef.current = socket;
+
       socket.on('chatHistory', setMessages);
       socket.on('message', msg => setMessages(prev => [...prev, msg]));
+      socket.on('usersOnline', setUsersOnline);
+
+      // --- Typing events ---
+      socket.on('typing', user => {
+        if (user !== username) setSomeoneTyping(true);
+      });
+      socket.on('stopTyping', user => {
+        if (user !== username) setSomeoneTyping(false);
+      });
+
       return () => {
         socket.off('chatHistory');
         socket.off('message');
+        socket.off('usersOnline');
+        socket.off('typing');
+        socket.off('stopTyping');
       };
-    }, []);
+    }, [username]);
 
-    function sendMessage() {
-      if (!input.trim()) return;
-      socket.emit('message', { user: username, text: input });
-      setInput("");
+    // Auto-scroll to latest message
+    const messagesEndRef = React.useRef(null);
+    React.useEffect(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, [messages, someoneTyping]);
+
+    // Typing event emit (debounced)
+    React.useEffect(() => {
+      if (!joined) return;
+      if (typing) {
+        socketRef.current.emit("typing", username);
+        const timeout = setTimeout(() => {
+          socketRef.current.emit("stopTyping", username);
+        }, 1000);
+        return () => clearTimeout(timeout);
+      }
+    }, [typing, username, joined]);
+
+    function handleInputChange(e) {
+      setInput(e.target.value);
+      setTyping(true);
+      setTimeout(() => setTyping(false), 600);
     }
 
+    async function sendMessage() {
+      if (!input.trim()) return;
+      socketRef.current.emit('message', { user: username, text: input, time: new Date() });
+      setInput("");
+      setTyping(false);
+      socketRef.current.emit("stopTyping", username);
+    }
+
+    // --- Clear all messages ---
+    async function clearMessages() {
+      if (!window.confirm("Are you sure you want to clear all messages?")) return;
+      await fetch(SOCKET_URL + "/clear-messages", { method: "DELETE" });
+    }
+
+    // --- Welcome/Login screen ---
     if (!joined) {
       return (
-        <div className="flex flex-col items-center justify-center h-screen">
-          <div className="bg-white p-6 rounded shadow-md w-80">
-            <h1 className="text-xl mb-2 font-bold">Enter your name</h1>
+        <div className="flex flex-col items-center justify-center min-h-screen select-none relative z-10">
+          <div className="glass p-8 shadow-2xl max-w-[350px] w-full">
+            <div className="flex justify-center mb-2">
+              <span className="fa-solid fa-comments fa-3x text-indigo-400 drop-shadow" />
+            </div>
+            <h1 className="text-2xl font-bold text-center mb-3 text-gray-900 tracking-tight">Welcome to Advanced Chat Pro</h1>
+            <p className="text-center text-gray-600 mb-6">Enter your display name to join the live chat room.</p>
             <input 
-              className="border rounded px-2 py-1 w-full mb-4"
+              className="border border-gray-300 rounded-full px-4 py-2 w-full mb-4 focus:ring-2 focus:ring-indigo-300 focus:outline-none text-lg bg-white bg-opacity-70"
               value={username}
               placeholder="Your name..."
-              onChange={e => setUsername(e.target.value)}
+              autoFocus
+              maxLength={18}
+              onChange={e => setUsername(e.target.value.replace(/[^\w\s]/gi, ""))}
               onKeyDown={e => e.key === 'Enter' && username && setJoined(true)}
             />
             <button
-              className="w-full bg-blue-500 text-white rounded px-2 py-1"
+              className="w-full bg-gradient-to-r from-indigo-400 to-green-400 hover:from-green-400 hover:to-indigo-400 text-white rounded-full font-bold py-2 shadow-lg focus:outline-none focus:ring"
+              style={{transition:'0.2s'}}
               disabled={!username}
               onClick={() => setJoined(true)}
-            >Join Chat</button>
+            ><span className="fa-solid fa-right-to-bracket mr-2"></span>Join Chat</button>
+          </div>
+          <div className="absolute bottom-8 text-gray-100 w-full z-0 text-center pointer-events-none select-none text-lg font-semibold opacity-60 tracking-wider">
+            <span>Made with <span className="fa fa-bolt text-yellow-400" /> Chat Pro</span>
           </div>
         </div>
       );
     }
 
+    // --- Chat main screen ---
     return (
-      <div className="flex flex-col items-center h-screen">
-        <div className="bg-white w-full max-w-md p-5 rounded shadow flex flex-col h-[90vh] mt-6">
-          <div className="flex-1 overflow-y-auto border-b mb-3">
+      <div className="flex flex-col items-center min-h-screen py-8 relative z-10">
+        {/* Chat header */}
+        <div className="glass w-full max-w-md p-4 mb-4 shadow-xl flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="fa-solid fa-comments fa-lg text-indigo-400" />
+            <span className="font-bold text-lg text-gray-900">Advanced Chat Pro</span>
+            <span className="fa-solid fa-circle text-green-400 animate-pulse ml-1" title="Online"/>
+            <span className="ml-1 text-xs font-medium text-gray-500">({usersOnline})</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-gray-600 text-sm flex items-center">
+              <span className="w-2 h-2 bg-green-400 rounded-full mr-1 animate-pulse" title="You are online"/>
+              {username}
+            </span>
+            {isAdmin && (
+              <button
+                className="ml-2 px-3 py-1 rounded-full bg-gradient-to-r from-red-400 to-pink-400 text-white font-bold text-xs shadow-md hover:from-pink-400 hover:to-red-400 hover:scale-105 transition"
+                onClick={clearMessages}
+              >Clear All</button>
+            )}
+          </div>
+        </div>
+
+        {/* Chat body */}
+        <div className="glass flex-1 w-full max-w-md flex flex-col rounded-lg shadow-2xl p-0 relative overflow-hidden"
+             style={{minHeight: 460, maxHeight: 500}}>
+
+          <div className="flex-1 overflow-y-auto p-4 transition-all"
+               style={{scrollBehavior:"smooth"}}>
+            {/* Message list */}
             {messages.map((m, i) => (
-              <div key={i} className="mb-2">
-                <span className={`font-bold ${m.user === username ? 'text-blue-600' : 'text-gray-700'}`}>{m.user}</span>
-                <span>: </span>
-                <span>{m.text}</span>
+              <div key={i}
+                   className={`flex items-end mb-2
+                     ${m.user === username ? "justify-end" : "justify-start"}`}>
+                {/* Show user name and time for other's messages */}
+                {m.user !== username && (
+                  <span className="mr-2 mb-6 flex flex-col items-start">
+                    <span className="text-xs font-semibold text-indigo-600">{m.user}</span>
+                  </span>
+                )}
+                <div
+                  className={`
+                    px-4 py-2 rounded-2xl glass shadow-md font-medium max-w-[70%] break-words
+                    ${m.user === username
+                        ? "bg-gradient-to-tr from-green-200 via-teal-100 to-white text-gray-900 rounded-br-3xl rounded-tr-none"
+                        : "bg-gradient-to-tr from-indigo-200 via-purple-100 to-white text-gray-800 rounded-bl-3xl rounded-tl-none"}
+                    animate-slideInUp
+                  `}
+                  style={{backdropFilter:'blur(5px)'}}
+                >
+                  <span>{m.text}</span>
+                  <span className="block text-[10px] text-right text-gray-500 font-mono tracking-tighter mt-1 opacity-80">
+                    {formatTime(m.time || Date.now())}
+                  </span>
+                </div>
               </div>
             ))}
+            <TypingIndicator show={someoneTyping}/>
+            <div ref={messagesEndRef} />
           </div>
-          <div className="flex gap-2 mt-2">
+
+          {/* Input area */}
+          <div className="border-t px-3 py-2 bg-white bg-opacity-50 flex items-center gap-2"
+               style={{backdropFilter:"blur(8px)"}}>
             <input
-              className="border rounded flex-1 px-2 py-1"
+              className="flex-1 border-none outline-none bg-transparent px-2 py-2 text-base rounded-full placeholder:text-gray-400 font-medium focus:ring-2 focus:ring-indigo-300"
               value={input}
-              autoFocus
               placeholder="Type a message..."
-              onChange={e => setInput(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && sendMessage()}
+              autoFocus
+              maxLength={200}
+              onChange={handleInputChange}
+              onKeyDown={e => {
+                if (e.key === "Enter") sendMessage();
+              }}
             />
             <button
-              className="bg-blue-500 text-white rounded px-4"
+              className="bg-gradient-to-br from-indigo-400 to-green-400 hover:from-green-400 hover:to-indigo-400 rounded-full px-4 py-2 text-white shadow-xl text-lg font-bold transition hover:scale-110 focus:ring-2 focus:ring-indigo-400"
+              style={{minWidth:50}}
               onClick={sendMessage}
-            >Send</button>
+              title="Send"
+            >
+              <span className="fa-solid fa-paper-plane" />
+            </button>
           </div>
+        </div>
+        {/* Footer/Signature */}
+        <div className="text-xs text-white mt-4 opacity-70 select-none pointer-events-none">
+          <span className="fa fa-bolt text-yellow-300 mr-1" /> Ultra Visual Chat UI
         </div>
       </div>
     );
   }
+
+  // Extra CSS for message animation
+  document.head.insertAdjacentHTML("beforeend", `
+    <style>
+      .animate-slideInUp {
+        animation: slideInUp 0.4s cubic-bezier(.68,-0.55,.27,1.55) both;
+      }
+      @keyframes slideInUp {
+        from { transform: translateY(44px) scale(0.96); opacity:0.1 }
+        to { transform: translateY(0) scale(1); opacity:1; }
+      }
+    </style>
+  `);
 
   ReactDOM.createRoot(document.getElementById("root")).render(<ChatApp />);
   </script>
