@@ -1,4 +1,3 @@
-
 const express = require('express');
 const http = require('http');
 const mongoose = require('mongoose');
@@ -9,16 +8,13 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-const mongoose = require('mongoose');
-
-// Full connection string with your password inserted:
-mongoose.connect('mongodb+srv://srinathraikunta5:cUFqjqSlwjY247xC@cluster0.vzaw76j.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0', {
-  useNewUrlParser: true,
-  useUnifiedTopology: true
-})
+// Connect to MongoDB
+mongoose.connect(
+  'mongodb+srv://srinathraikunta5:cUFqjqSlwjY247xC@cluster0.vzaw76j.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0',
+  { useNewUrlParser: true, useUnifiedTopology: true }
+)
 .then(() => console.log('MongoDB connected'))
 .catch(error => console.error('MongoDB connection error:', error));
-
 
 const MessageSchema = new mongoose.Schema({
   user: String,
@@ -32,9 +28,7 @@ app.get('/', (req, res) => {
 });
 
 const server = http.createServer(app);
-const io = new Server(server, {
-  cors: { origin: "*" }
-});
+const io = new Server(server, { cors: { origin: '*' } });
 
 io.on('connection', socket => {
   Message.find().sort({ time: 1 }).limit(20).then(messages => {
