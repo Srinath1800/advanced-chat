@@ -17,13 +17,9 @@
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
   <script crossorigin src="https://unpkg.com/babel-standalone@6.26.0/babel.min.js"></script>
   <style>
-    html, body {
-      height: 100%;
-      font-family: 'Inter', sans-serif;
-    }
+    html, body { height: 100%; font-family: 'Inter', sans-serif; }
     body {
       min-height: 100vh;
-      /* Gradient background */
       background: linear-gradient(135deg, #8360c3 0%, #2ebf91 100%);
       position: relative;
       overflow: hidden;
@@ -35,26 +31,10 @@
       border-radius: 24px;
       border: 1px solid rgba(255,255,255,0.12);
     }
-    /* Floating particles for background */
-    .particle {
-      position: absolute;
-      border-radius: 50%;
-      opacity: 0.2;
-      z-index: 0;
-      animation: float 12s infinite linear;
-    }
-    .particle:nth-child(1) {
-      width: 140px; height: 140px; left: 5vw; top: 16vh; background: #2ebf91;
-      animation-duration: 20s;
-    }
-    .particle:nth-child(2) {
-      width: 90px; height: 90px; right: 10vw; top: 30vh; background: #8360c3;
-      animation-duration: 16s; animation-delay: 6s;
-    }
-    .particle:nth-child(3) {
-      width: 55px; height: 55px; right: 17vw; bottom: 16vh; background: #fff;
-      animation-duration: 14s; animation-delay: 3s;
-    }
+    .particle { position: absolute; border-radius: 50%; opacity: 0.2; z-index: 0; animation: float 12s infinite linear; }
+    .particle:nth-child(1) { width: 140px; height: 140px; left: 5vw; top: 16vh; background: #2ebf91; animation-duration: 20s; }
+    .particle:nth-child(2) { width: 90px; height: 90px; right: 10vw; top: 30vh; background: #8360c3; animation-duration: 16s; animation-delay: 6s; }
+    .particle:nth-child(3) { width: 55px; height: 55px; right: 17vw; bottom: 16vh; background: #fff; animation-duration: 14s; animation-delay: 3s; }
     @keyframes float {
       0% { transform: translateY(0) }
       50% { transform: translateY(35px) }
@@ -70,196 +50,226 @@
   
   <div id="root" class="relative z-10"></div>
   <script type="text/babel">
+  // SETTINGS
+  const API_URL = "https://advanced-chat-xt5o.onrender.com"; // Your backend
+  const SOCKET_URL = API_URL;
 
-  // --- SETTINGS ---
-  const SOCKET_URL = "https://advanced-chat-xt5o.onrender.com"; // Your backend
-
-  // Utility: get readable time
-  function formatTime(dateStr) {
-    const d = new Date(dateStr);
-    return d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+  function getToken() {
+    return window.localStorage.getItem("token");
+  }
+  function setToken(t) {
+    window.localStorage.setItem("token", t);
   }
 
-  function TypingIndicator({show}) {
-    if (!show) return null;
+  // Auth/Login/Register form
+  function AuthScreen({ setUser }) {
+    const [tab, setTab] = React.useState('login');
+    const [form, setForm] = React.useState({ username: "", password: "" });
+    const [error, setError] = React.useState("");
+    async function submit(e) {
+      e.preventDefault();
+      setError("");
+      const path = tab === "login" ? "/login" : "/register";
+      const res = await fetch(API_URL+path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form)
+      });
+      const data = await res.json();
+      if (data.token) {
+        setToken(data.token);
+        setUser({ username: data.username, token: data.token });
+      } else if (data.success) {
+        setTab("login");
+      } else {
+        setError(data.error || "Error");
+      }
+    }
     return (
-      <div className="flex items-center my-3">
-        <span className="bg-gray-300 rounded-2xl px-3 py-1 flex items-center glass">
-          <span className="mr-2">Someone is typing</span>
-          <span className="flex space-x-1">
-            {[0,1,2].map(i => (
-              <span key={i} className={`h-2 w-2 bg-gray-500 rounded-full animate-bounce`}
-                style={{animationDelay: `${i*0.2}s`}}></span>
-            ))}
-          </span>
-        </span>
+      <div className="flex flex-col items-center justify-center min-h-screen">
+        <div className="glass p-8 shadow-2xl max-w-[350px] w-full">
+          <h1 className="text-2xl font-bold text-center mb-3 text-gray-900">Advanced Chat Pro</h1>
+          <div className="flex justify-center mb-3">
+            <button className={`px-3 py-1 rounded-l-full font-semibold ${tab==="login" ? "bg-indigo-400 text-white" : "bg-gray-200"}`}
+              onClick={() => setTab('login')}>Login</button>
+            <button className={`px-3 py-1 rounded-r-full font-semibold ${tab==="register" ? "bg-indigo-400 text-white" : "bg-gray-200"}`}
+              onClick={() => setTab('register')}>Register</button>
+          </div>
+          <form onSubmit={submit} className="space-y-3">
+            <input type="text" maxLength={20} required autoFocus
+              className="border border-gray-300 rounded-full px-4 py-2 w-full"
+              placeholder="Username"
+              value={form.username}
+              onChange={e=>setForm(f=>({...f, username: e.target.value.replace(/[^\w]/g,'')}))}/>
+            <input type="password" required
+              className="border border-gray-300 rounded-full px-4 py-2 w-full"
+              placeholder="Password"
+              value={form.password}
+              onChange={e=>setForm(f=>({...f, password: e.target.value}))}/>
+            {error && <p className="text-red-500">{error}</p>}
+            <button
+              className="w-full bg-gradient-to-r from-indigo-400 to-green-400 hover:from-green-400 hover:to-indigo-400 text-white rounded-full font-bold py-2 shadow-lg"
+              type="submit">{tab === "login" ? "Login" : "Register"}</button>
+          </form>
+        </div>
       </div>
     );
   }
 
-  // Main App
+  // Room selection
+  function RoomSelector({ user, setRoom }) {
+    const [roomName, setRoomName] = React.useState("");
+    function pickRoom(e) {
+      e.preventDefault();
+      if (roomName.trim()) setRoom(roomName.toLowerCase());
+    }
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen select-none relative z-10">
+        <div className="glass p-8 shadow-2xl max-w-[350px] w-full">
+          <h2 className="text-xl font-bold text-center mb-3 text-gray-900">Hello, {user.username}</h2>
+          <p className="mb-3 text-center">Enter a room name to start chatting.</p>
+          <form onSubmit={pickRoom}>
+            <input className="border border-gray-300 rounded-full px-4 py-2 w-full mb-4 focus:ring-2 focus:ring-indigo-300"
+              value={roomName}
+              placeholder="Room name..."
+              onChange={e=>setRoomName(e.target.value.replace(/[^\w]/g,''))}
+              autoFocus />
+            <button className="w-full bg-gradient-to-r from-indigo-400 to-green-400 text-white rounded-full font-bold py-2 shadow-lg"
+              type="submit" disabled={!roomName}>Join Room</button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  // Chat App Main
   function ChatApp() {
+    const [user, setUser] = React.useState(()=> {
+      const token = getToken();
+      return token ? { token } : null;
+    });
+    const [room, setRoom] = React.useState("");
     const [messages, setMessages] = React.useState([]);
     const [input, setInput] = React.useState("");
-    const [username, setUsername] = React.useState("");
-    const [joined, setJoined] = React.useState(false);
     const [usersOnline, setUsersOnline] = React.useState(1);
     const [typing, setTyping] = React.useState(false);
     const [someoneTyping, setSomeoneTyping] = React.useState(false);
-
-    const isAdmin = username.trim().toLowerCase() === "admin";
-
-    // Setup socket
     const socketRef = React.useRef(null);
 
+    // Add message time display
+    function formatTime(dateStr) {
+      const d = new Date(dateStr);
+      return d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+    }
+
+    // Handle socket.io connection
     React.useEffect(() => {
+      if (!user?.username || !room) return;
       const socket = io(SOCKET_URL);
       socketRef.current = socket;
+      socket.emit('join', { username: user.username, room, token: user.token });
 
       socket.on('chatHistory', setMessages);
       socket.on('message', msg => setMessages(prev => [...prev, msg]));
       socket.on('usersOnline', setUsersOnline);
-
-      // --- Typing events ---
-      socket.on('typing', user => {
-        if (user !== username) setSomeoneTyping(true);
+      socket.on('typing', () => setSomeoneTyping(true));
+      socket.on('stopTyping', () => setSomeoneTyping(false));
+      socket.on('authError', () => {
+        alert("Session expired. Please login again.");
+        setUser(null);
       });
-      socket.on('stopTyping', user => {
-        if (user !== username) setSomeoneTyping(false);
-      });
-
       return () => {
-        socket.off('chatHistory');
-        socket.off('message');
-        socket.off('usersOnline');
-        socket.off('typing');
-        socket.off('stopTyping');
+        socket.off();
+        socket.disconnect();
       };
-    }, [username]);
+    }, [user, room]);
 
-    // Auto-scroll to latest message
+    // Scroll to latest message
     const messagesEndRef = React.useRef(null);
     React.useEffect(() => {
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [messages, someoneTyping]);
 
-    // Typing event emit (debounced)
+    // Typing event handler
     React.useEffect(() => {
-      if (!joined) return;
+      if (!user?.username || !room) return;
       if (typing) {
-        socketRef.current.emit("typing", username);
+        socketRef.current.emit("typing", {room, user: user.username});
         const timeout = setTimeout(() => {
-          socketRef.current.emit("stopTyping", username);
+          socketRef.current.emit("stopTyping", {room, user: user.username});
         }, 1000);
         return () => clearTimeout(timeout);
       }
-    }, [typing, username, joined]);
-
-    function handleInputChange(e) {
-      setInput(e.target.value);
-      setTyping(true);
-      setTimeout(() => setTyping(false), 600);
-    }
+    }, [typing, user, room]);
 
     async function sendMessage() {
       if (!input.trim()) return;
-      socketRef.current.emit('message', { user: username, text: input, time: new Date() });
+      socketRef.current.emit('message', { user: user.username, room, text: input });
       setInput("");
       setTyping(false);
-      socketRef.current.emit("stopTyping", username);
+      socketRef.current.emit("stopTyping", {room, user: user.username});
     }
-
-    // --- Clear all messages ---
     async function clearMessages() {
-      if (!window.confirm("Are you sure you want to clear all messages?")) return;
-      await fetch(SOCKET_URL + "/clear-messages", { method: "DELETE" });
+      if (!window.confirm("Clear all messages?")) return;
+      await fetch(`${API_URL}/clear-messages/${room}`, {
+        method: "DELETE",
+        headers: { 'Authorization': user.token }
+      });
     }
 
-    // --- Welcome/Login screen ---
-    if (!joined) {
-      return (
-        <div className="flex flex-col items-center justify-center min-h-screen select-none relative z-10">
-          <div className="glass p-8 shadow-2xl max-w-[350px] w-full">
-            <div className="flex justify-center mb-2">
-              <span className="fa-solid fa-comments fa-3x text-indigo-400 drop-shadow" />
-            </div>
-            <h1 className="text-2xl font-bold text-center mb-3 text-gray-900 tracking-tight">Welcome to Advanced Chat Pro</h1>
-            <p className="text-center text-gray-600 mb-6">Enter your display name to join the live chat room.</p>
-            <input 
-              className="border border-gray-300 rounded-full px-4 py-2 w-full mb-4 focus:ring-2 focus:ring-indigo-300 focus:outline-none text-lg bg-white bg-opacity-70"
-              value={username}
-              placeholder="Your name..."
-              autoFocus
-              maxLength={18}
-              onChange={e => setUsername(e.target.value.replace(/[^\w\s]/gi, ""))}
-              onKeyDown={e => e.key === 'Enter' && username && setJoined(true)}
-            />
-            <button
-              className="w-full bg-gradient-to-r from-indigo-400 to-green-400 hover:from-green-400 hover:to-indigo-400 text-white rounded-full font-bold py-2 shadow-lg focus:outline-none focus:ring"
-              style={{transition:'0.2s'}}
-              disabled={!username}
-              onClick={() => setJoined(true)}
-            ><span className="fa-solid fa-right-to-bracket mr-2"></span>Join Chat</button>
-          </div>
-          <div className="absolute bottom-8 text-gray-100 w-full z-0 text-center pointer-events-none select-none text-lg font-semibold opacity-60 tracking-wider">
-            <span>Made with <span className="fa fa-bolt text-yellow-400" /> Chat Pro</span>
-          </div>
-        </div>
-      );
+    // If not authenticated (login/register)
+    if (!user?.token)   return <AuthScreen setUser={setUser} />;
+    if (!user?.username) {
+      // After token, fetch user info (you could decode username from JWT in real production)
+      // Here, just ask for username and login again if missing
+      setUser(null);
     }
+    // If no room picked, show room selector
+    if (!room)          return <RoomSelector user={user} setRoom={setRoom} />;
 
-    // --- Chat main screen ---
+    const isAdmin = user.username === "admin";
+
+    // Chat UI
     return (
       <div className="flex flex-col items-center min-h-screen py-8 relative z-10">
-        {/* Chat header */}
         <div className="glass w-full max-w-md p-4 mb-4 shadow-xl flex items-center justify-between">
           <div className="flex items-center gap-3">
             <span className="fa-solid fa-comments fa-lg text-indigo-400" />
-            <span className="font-bold text-lg text-gray-900">Advanced Chat Pro</span>
+            <span className="font-bold text-lg text-gray-900">Room: "{room}"</span>
             <span className="fa-solid fa-circle text-green-400 animate-pulse ml-1" title="Online"/>
             <span className="ml-1 text-xs font-medium text-gray-500">({usersOnline})</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-gray-600 text-sm flex items-center">
               <span className="w-2 h-2 bg-green-400 rounded-full mr-1 animate-pulse" title="You are online"/>
-              {username}
+              {user.username}
             </span>
             {isAdmin && (
-              <button
-                className="ml-2 px-3 py-1 rounded-full bg-gradient-to-r from-red-400 to-pink-400 text-white font-bold text-xs shadow-md hover:from-pink-400 hover:to-red-400 hover:scale-105 transition"
-                onClick={clearMessages}
-              >Clear All</button>
+              <button className="ml-2 px-3 py-1 rounded-full bg-gradient-to-r from-red-400 to-pink-400 text-white font-bold text-xs shadow-md hover:from-pink-400 hover:to-red-400 hover:scale-105 transition"
+                onClick={clearMessages}>Clear All</button>
             )}
           </div>
         </div>
-
-        {/* Chat body */}
         <div className="glass flex-1 w-full max-w-md flex flex-col rounded-lg shadow-2xl p-0 relative overflow-hidden"
              style={{minHeight: 460, maxHeight: 500}}>
-
           <div className="flex-1 overflow-y-auto p-4 transition-all"
                style={{scrollBehavior:"smooth"}}>
-            {/* Message list */}
             {messages.map((m, i) => (
               <div key={i}
-                   className={`flex items-end mb-2
-                     ${m.user === username ? "justify-end" : "justify-start"}`}>
-                {/* Show user name and time for other's messages */}
-                {m.user !== username && (
+                className={`flex items-end mb-2 ${m.user === user.username ? "justify-end" : "justify-start"}`}>
+                {m.user !== user.username && (
                   <span className="mr-2 mb-6 flex flex-col items-start">
                     <span className="text-xs font-semibold text-indigo-600">{m.user}</span>
                   </span>
                 )}
-                <div
-                  className={`
-                    px-4 py-2 rounded-2xl glass shadow-md font-medium max-w-[70%] break-words
-                    ${m.user === username
-                        ? "bg-gradient-to-tr from-green-200 via-teal-100 to-white text-gray-900 rounded-br-3xl rounded-tr-none"
-                        : "bg-gradient-to-tr from-indigo-200 via-purple-100 to-white text-gray-800 rounded-bl-3xl rounded-tl-none"}
-                    animate-slideInUp
-                  `}
-                  style={{backdropFilter:'blur(5px)'}}
-                >
+                <div className={`
+                  px-4 py-2 rounded-2xl glass shadow-md font-medium max-w-[70%] break-words
+                  ${m.user === user.username
+                      ? "bg-gradient-to-tr from-green-200 via-teal-100 to-white text-gray-900 rounded-br-3xl rounded-tr-none"
+                      : "bg-gradient-to-tr from-indigo-200 via-purple-100 to-white text-gray-800 rounded-bl-3xl rounded-tl-none"}
+                  animate-slideInUp
+                `}
+                  style={{backdropFilter:'blur(5px)'}}>
                   <span>{m.text}</span>
                   <span className="block text-[10px] text-right text-gray-500 font-mono tracking-tighter mt-1 opacity-80">
                     {formatTime(m.time || Date.now())}
@@ -267,11 +277,21 @@
                 </div>
               </div>
             ))}
-            <TypingIndicator show={someoneTyping}/>
+            {someoneTyping && (
+              <div className="flex items-center my-3">
+                <span className="bg-gray-300 rounded-2xl px-3 py-1 flex items-center glass">
+                  <span className="mr-2">Someone is typing</span>
+                  <span className="flex space-x-1">
+                    {[0,1,2].map(i => (
+                      <span key={i} className="h-2 w-2 bg-gray-500 rounded-full animate-bounce"
+                        style={{animationDelay: `${i*0.2}s`}}></span>
+                    ))}
+                  </span>
+                </span>
+              </div>
+            )}
             <div ref={messagesEndRef} />
           </div>
-
-          {/* Input area */}
           <div className="border-t px-3 py-2 bg-white bg-opacity-50 flex items-center gap-2"
                style={{backdropFilter:"blur(8px)"}}>
             <input
@@ -280,10 +300,8 @@
               placeholder="Type a message..."
               autoFocus
               maxLength={200}
-              onChange={handleInputChange}
-              onKeyDown={e => {
-                if (e.key === "Enter") sendMessage();
-              }}
+              onChange={e => {setInput(e.target.value); setTyping(true); setTimeout(() => setTyping(false), 600);}}
+              onKeyDown={e => {if (e.key === "Enter") sendMessage();}}
             />
             <button
               className="bg-gradient-to-br from-indigo-400 to-green-400 hover:from-green-400 hover:to-indigo-400 rounded-full px-4 py-2 text-white shadow-xl text-lg font-bold transition hover:scale-110 focus:ring-2 focus:ring-indigo-400"
@@ -295,7 +313,6 @@
             </button>
           </div>
         </div>
-        {/* Footer/Signature */}
         <div className="text-xs text-white mt-4 opacity-70 select-none pointer-events-none">
           <span className="fa fa-bolt text-yellow-300 mr-1" /> Ultra Visual Chat UI
         </div>
