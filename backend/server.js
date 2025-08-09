@@ -9,12 +9,16 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Replace 'YOUR_MONGO_URI' with your Atlas connection string below or use the env variable:
-mongoose.connect(process.env.MONGODB_URI || 'YOUR_MONGO_URI', {
+const mongoose = require('mongoose');
+
+// Full connection string with your password inserted:
+mongoose.connect('mongodb+srv://srinathraikunta5:cUFqjqSlwjY247xC@cluster0.vzaw76j.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0', {
   useNewUrlParser: true,
   useUnifiedTopology: true
-}).then(() => console.log("MongoDB connected"))
-  .catch((e) => console.error(e));
+})
+.then(() => console.log('MongoDB connected'))
+.catch(error => console.error('MongoDB connection error:', error));
+
 
 const MessageSchema = new mongoose.Schema({
   user: String,
