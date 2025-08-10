@@ -10,48 +10,139 @@
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
   <script crossorigin src="https://unpkg.com/babel-standalone@6.26.0/babel.min.js"></script>
 </head>
-<body class="bg-gray-100">
-  <div id="root"></div>
+<body class="bg-gray-100 min-h-screen">
+  <div id="root" class="min-h-screen"></div>
   <script type="text/babel">
 
-  // Use your Render backend URL here!
-  const socket = io("https://advanced-chat-xt5o.onrender.com");
+  // Utility for avatar placeholder (user initials)
+  function getAvatar(username) {
+    if (!username) return '';
+    return username.split(' ')
+      .map(w => w[0].toUpperCase())
+      .join('')
+      .slice(0, 2);
+  }
+
+  const socket = io('https://advanced-chat-xt5o.onrender.com');
+
+  function useAutoscroll(ref, deps) {
+    React.useEffect(() => {
+      if (ref.current) {
+        ref.current.scrollTop = ref.current.scrollHeight;
+      }
+    }, deps); // run on deps change
+  }
+
+  function formatTime(timestamp) {
+    const d = new Date(timestamp);
+    return d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+  }
+
+  function ChatMessage({ msg, self }) {
+    return (
+      <div className={`flex mt-2 ${self ? 'justify-end' : 'justify-start'}`}>
+        {!self && (
+          <div className="flex-shrink-0 h-8 w-8 rounded-full bg-blue-200 flex items-center justify-center mr-2 text-blue-700 font-bold">
+            {getAvatar(msg.user)}
+          </div>
+        )}
+        <div className={`rounded-xl px-4 py-2 shadow ${self ? 'bg-blue-500 text-white' : 'bg-white text-gray-700'}`}>
+          <div className="flex items-center gap-2">
+            <div className="text-xs font-semibold">{!self && msg.user}</div>
+            <div className="text-xs opacity-60">{formatTime(msg.time || Date.now())}</div>
+          </div>
+          <div className="mt-1 break-words">{msg.text}</div>
+        </div>
+        {self && (
+          <div className="flex-shrink-0 h-8 w-8 rounded-full bg-blue-500 flex items-center justify-center ml-2 text-white font-bold">
+            {getAvatar(msg.user)}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  function TypingIndicator({ name }) {
+    return (
+      <div className="mt-2 flex items-center text-sm text-gray-500 animate-pulse">
+        <span className="mr-1 font-semibold">{name}</span> is typing...
+      </div>
+    );
+  }
 
   function ChatApp() {
     const [messages, setMessages] = React.useState([]);
     const [input, setInput] = React.useState("");
     const [username, setUsername] = React.useState("");
     const [joined, setJoined] = React.useState(false);
+    const [typingUser, setTypingUser] = React.useState(null);
+    const [loading, setLoading] = React.useState(true);
+
+    const messagesEndRef = React.useRef();
+
+    // Auto-scroll to bottom on new message
+    useAutoscroll(messagesEndRef, [messages]);
 
     React.useEffect(() => {
-      socket.on('chatHistory', setMessages);
+      // receive previous messages
+      socket.on('chatHistory', msgs => {
+        setMessages(msgs);
+        setLoading(false);
+      });
+      // receive new message
       socket.on('message', msg => setMessages(prev => [...prev, msg]));
+
+      // handle typing users (optional: only if your backend emits such event)
+      socket.on('user_typing', ({ user, typing }) => {
+        setTypingUser(typing ? user : null);
+      });
+
       return () => {
         socket.off('chatHistory');
         socket.off('message');
+        socket.off('user_typing');
       };
     }, []);
 
+    // Typing event emitter (basic)
+    React.useEffect(() => {
+      if (!joined) return;
+      if (!input) return;
+      socket.emit('user_typing', { user: username, typing: true });
+      const timer = setTimeout(() => {
+        socket.emit('user_typing', { user: username, typing: false });
+      }, 1200);
+      return () => clearTimeout(timer);
+    }, [input, joined, username]);
+
     function sendMessage() {
       if (!input.trim()) return;
-      socket.emit('message', { user: username, text: input });
+      const msg = { user: username, text: input, time: Date.now() };
+      socket.emit('message', msg);
       setInput("");
     }
 
     if (!joined) {
       return (
-        <div className="flex flex-col items-center justify-center h-screen">
-          <div className="bg-white p-6 rounded shadow-md w-80">
-            <h1 className="text-xl mb-2 font-bold">Enter your name</h1>
+        <div className="flex flex-col items-center justify-center min-h-screen">
+          <div className="bg-white p-8 rounded shadow-md w-80 border">
+            <div className="mb-4 text-center">
+              <span className="inline-block h-12 w-12 rounded-full bg-gradient-to-tl from-blue-500 to-purple-500 text-white text-xl flex items-center justify-center mb-2">
+                💬
+              </span>
+              <h1 className="text-2xl mb-1 font-bold tracking-tight">Welcome to Advanced Chat</h1>
+              <div className="text-gray-500 text-sm">Enter your name to get started:</div>
+            </div>
             <input 
-              className="border rounded px-2 py-1 w-full mb-4"
+              className="border rounded px-3 py-2 w-full mb-4 focus:outline-none focus:ring focus:border-blue-400"
               value={username}
               placeholder="Your name..."
               onChange={e => setUsername(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && username && setJoined(true)}
+              autoFocus
             />
             <button
-              className="w-full bg-blue-500 text-white rounded px-2 py-1"
+              className="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded px-2 py-2 shadow"
               disabled={!username}
               onClick={() => setJoined(true)}
             >Join Chat</button>
@@ -61,31 +152,49 @@
     }
 
     return (
-      <div className="flex flex-col items-center h-screen">
-        <div className="bg-white w-full max-w-md p-5 rounded shadow flex flex-col h-[90vh] mt-6">
-          <div className="flex-1 overflow-y-auto border-b mb-3">
+      <div className="flex flex-col items-center min-h-screen bg-gray-100 py-8">
+        <div className="bg-white w-full max-w-md p-4 rounded-xl shadow-lg flex flex-col h-[75vh]">
+          <div className="font-semibold text-lg text-blue-600 mb-2 flex items-center gap-2">
+            <span className="h-8 w-8 flex items-center justify-center rounded-full bg-blue-200 text-blue-600 text-lg font-bold">
+              {getAvatar(username)}
+            </span>
+            <span>Hi, {username}!</span>
+          </div>
+          <div className="flex-1 overflow-y-auto flex flex-col gap-1 border rounded-lg p-2 mb-2 bg-gray-50" ref={messagesEndRef}>
+            {loading && <div className="text-center text-gray-400 mt-20">Loading chat history…</div>}
+            {!loading && messages.length === 0 && (
+              <div className="text-center text-gray-400 mt-10">No messages yet. Start the conversation!</div>
+            )}
             {messages.map((m, i) => (
-              <div key={i} className="mb-2">
-                <span className={`font-bold ${m.user === username ? 'text-blue-600' : 'text-gray-700'}`}>{m.user}</span>
-                <span>: </span>
-                <span>{m.text}</span>
-              </div>
+              <ChatMessage
+                key={i}
+                msg={m}
+                self={m.user === username}
+              />
             ))}
+            {typingUser && typingUser !== username &&
+              <TypingIndicator name={typingUser} />
+            }
           </div>
           <div className="flex gap-2 mt-2">
             <input
-              className="border rounded flex-1 px-2 py-1"
+              className="border rounded flex-1 px-3 py-2 focus:outline-none focus:border-blue-400"
               value={input}
               autoFocus
-              placeholder="Type a message..."
+              placeholder="Type a message and hit ↵ Enter…"
+              maxLength={500}
               onChange={e => setInput(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && sendMessage()}
+              onKeyDown={e => {if (e.key === 'Enter') sendMessage();}}
             />
             <button
-              className="bg-blue-500 text-white rounded px-4"
+              className="bg-blue-600 hover:bg-blue-700 text-white rounded px-6 font-semibold shadow"
               onClick={sendMessage}
+              disabled={!input.trim()}
             >Send</button>
           </div>
+        </div>
+        <div className="mt-4 text-sm text-gray-400">
+          Powered by React, Socket.io & Tailwind CSS
         </div>
       </div>
     );
